@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { LabelData, LabelSize } from '../types';
 import { translateToPersian } from '../utils/gemini';
@@ -161,7 +160,7 @@ export const LabelForm: React.FC<LabelFormProps> = ({
                 type="text"
                 value={data.weight}
                 onChange={(e) => handleChange('weight', e.target.value)}
-                className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-amber-400 font-bold font-mono text-lg"
+                className="w-full bg-slate-900 border-2 border-slate-600 rounded px-3 py-2 text-amber-400 font-bold font-mono text-lg focus:border-amber-500 focus:shadow-[0_0_10px_rgba(245,158,11,0.5)] transition-all outline-none"
               />
            </div>
            <div>

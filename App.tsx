@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { LabelForm } from './components/LabelForm';
 import { LabelPreview } from './components/LabelPreview';
@@ -110,6 +109,7 @@ function App() {
           buffer += value;
           
           // Split by newline (handles \n or \r\n)
+          // Some scales end with \r, others \n. We split by any line terminator.
           const parts = buffer.split(/\r?\n/);
           
           // The last part is likely incomplete, save it back to buffer
@@ -119,23 +119,37 @@ function App() {
           for (const line of parts) {
             const cleanLine = line.trim();
             if (cleanLine.length > 0) {
-              // Log raw data for debugging
-              addLog(`RAW SCALE: "${cleanLine}"`, 'data');
+              // 1. LOG RAW DATA for debugging
+              addLog(`RX: "${cleanLine}"`, 'data');
 
-              // Regex Logic:
-              // 1. Look for numbers that might be weight.
-              // 2. Handles: "12.50", "12.50kg", "ST,GS,+ 12.50kg", "Weight: 12.50"
-              const weightMatch = cleanLine.match(/([0-9]+\.?[0-9]*)/);
+              // 2. FIND CANDIDATES
+              // Look for any sequence of digits, optionally with decimals
+              const candidates = cleanLine.match(/(\d+(\.\d+)?)/g);
               
-              if (weightMatch && weightMatch[1]) {
-                const rawWeight = parseFloat(weightMatch[1]);
-                
-                // Filter out unrealistic weights (e.g. 0 or empty) or specific timestamps
-                // Most label scales are 0.000 to 50.000 range.
-                if (!isNaN(rawWeight) && rawWeight > 0) {
-                   // Optional: If scale sends kg, convert to g if needed. 
-                   // Current logic assumes input is consistent with display requirement.
-                   setLabelData(prev => ({ ...prev, weight: rawWeight.toString() }));
+              if (candidates) {
+                for (const candidate of candidates) {
+                  const val = parseFloat(candidate);
+                  
+                  // Filter noise: weight usually > 0.
+                  // Avoid parsing years like 2024 or 1404 as weight if possible, 
+                  // but hard to know context. We assume weight is the "main" number.
+                  if (!isNaN(val) && val > 0) {
+                     addLog(`Candidate: ${val}`, 'info');
+                     
+                     // 3. UPDATE STATE
+                     // Only update if value changed to prevent infinite re-renders/logs
+                     setLabelData(prev => {
+                        if (prev.weight !== val.toString()) {
+                            addLog(`Auto-filling Weight: ${val}`, 'success');
+                            return { ...prev, weight: val.toString() };
+                        }
+                        return prev;
+                     });
+                     
+                     // If we found a valid weight, break inner loop to avoid using secondary numbers (like date parts) 
+                     // unless specific logic requires it.
+                     break; 
+                  }
                 }
               }
             }
