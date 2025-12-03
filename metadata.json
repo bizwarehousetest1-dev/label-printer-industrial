@@ -1,0 +1,7 @@
+{
+  "name": "Industrial Label Printer",
+  "description": "A React-based industrial label printing application with Web Serial scale integration, TSPL printer support, and Gemini AI assistance for translation.",
+  "requestFramePermissions": [
+    "serial"
+  ]
+}

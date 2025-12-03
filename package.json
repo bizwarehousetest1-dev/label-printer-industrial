@@ -1,0 +1,74 @@
+{
+  "name": "industrial-label-printer",
+  "version": "1.0.0",
+  "description": "Electron Label Printer with Serial Scale Integration and TSPL Support",
+  "main": "main.js",
+  "author": "Engineering",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "vite --port 3000",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "electron:dev": "concurrently -k \"npm start\" \"wait-on http://127.0.0.1:3000 && electron .\"",
+    "electron:build": "npm run build && electron-builder -w"
+  },
+  "dependencies": {
+    "@google/genai": "^1.30.0",
+    "electron-updater": "^6.1.7",
+    "html2canvas": "^1.4.1",
+    "jsbarcode": "^3.11.6",
+    "qrcode": "^1.5.3",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@types/w3c-web-serial": "^1.0.3",
+    "@vitejs/plugin-react": "^4.2.1",
+    "concurrently": "^8.2.2",
+    "electron": "^29.1.0",
+    "electron-builder": "^24.13.3",
+    "typescript": "^4.9.5",
+    "vite": "^5.2.0",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.industrial.labelprinter",
+    "productName": "Label Master",
+    "files": [
+      "dist/**/*",
+      "main.js"
+    ],
+    "directories": {
+      "buildResources": "assets",
+      "output": "release"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "assets/icon.icns"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "assets/icon.png",
+      "category": "Office"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "YOUR_GITHUB_USERNAME",
+        "repo": "YOUR_REPO_NAME"
+      }
+    ]
+  }
+}
