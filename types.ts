@@ -1,13 +1,32 @@
+
 export interface LabelData {
-  productName: string;
-  batchNumber: string;
+  // Shipping Specifics
+  trackingNumber: string; // 20-24 digits
+  orderId: string; // Internal Order ID
+  
+  // Sender (Ferestande)
+  senderName: string;
+  senderCity: string;
+  senderAddress: string; // Includes postal code usually
+  
+  // Receiver (Girande)
+  receiverName: string;
+  receiverCity: string;
+  receiverAddress: string;
+  receiverPostCode: string;
+  receiverPhone: string;
+  
+  // Package Info
   weight: string;
-  unit: string;
-  productionDate: string;
-  description: string;
-  barcode: string;
+  price: string;
+  paymentMethod: string; // e.g., "Tavafogh Shode" (Agreed)
+  date: string;
+  time: string;
+  
+  // Meta
+  barcode: string; // Usually same as tracking
   qrData: string;
-  persianText: string;
+  customNote: string;
 }
 
 export interface SerialDevice {
@@ -29,8 +48,8 @@ export enum PrinterType {
 }
 
 export enum LabelSize {
-  SIZE_80_100 = '80x100',
-  SIZE_100_100 = '100x100',
+  SIZE_80_100 = '80x100', // Standard thermal
+  SIZE_100_100 = '100x100', // Wide thermal
 }
 
 // Global declaration for Web Serial API

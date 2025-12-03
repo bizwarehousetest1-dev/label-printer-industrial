@@ -1,3 +1,4 @@
+
 import { LabelData, LabelSize } from '../types';
 
 export const generateTSPL = (data: LabelData, size: LabelSize): string => {
@@ -5,54 +6,40 @@ export const generateTSPL = (data: LabelData, size: LabelSize): string => {
   const height = 100;
 
   // Basic TSPL setup
-  // DIRECTION 1 = Print from top to bottom
   let commands = `SIZE ${width} mm,${height} mm\n`;
   commands += `GAP 3 mm,0 mm\n`;
   commands += `DIRECTION 1\n`;
   commands += `CLS\n`;
 
-  // Product Name (Bold, Large)
-  // Font "ROMAN.TTF" is standard on many TSPL printers, otherwise fallback to "0" (internal font)
-  commands += `TEXT 30,30,"ROMAN.TTF",0,12,12,"${data.productName}"\n`;
-
-  // Batch
-  commands += `TEXT 30,120,"2",0,1,1,"Batch: ${data.batchNumber}"\n`;
-  
-  // Date
-  commands += `TEXT 30,160,"2",0,1,1,"Date: ${data.productionDate}"\n`;
-
-  // Weight (Large)
-  commands += `TEXT 30,220,"3",0,2,2,"NET: ${data.weight} ${data.unit}"\n`;
-
-  // Description
-  // Simple word wrap simulation could go here, but keeping it simple for TSPL
-  const cleanDesc = data.description.replace(/"/g, '\\"').substring(0, 40);
-  commands += `TEXT 30,300,"2",0,1,1,"${cleanDesc}"\n`;
-
-  // Persian Text Support
-  // Attempt to print RTL text. Many basic thermal printers don't support RTL or complex shaping.
-  // Reversing the string helps on some firmwares that print chars LTR.
-  if (data.persianText) {
-      // Primitive reverse for basic display
-      const reversed = data.persianText.split('').reverse().join('');
-      // Using internal font "2" or "3" usually supports some unicode map if configured
-      commands += `TEXT 30,340,"2",0,1,1,"${reversed}"\n`;
-  }
+  // Header
+  commands += `TEXT 30,30,"3",0,1,1,"POST LABEL"\n`;
+  commands += `TEXT 400,30,"2",0,1,1,"${data.date}"\n`;
 
   // Barcode (Code 128)
-  // X, Y, "Type", Height, HumanReadable, Rotation, Narrow, Wide, Content
-  commands += `BARCODE 30,400,"128",80,1,0,2,2,"${data.barcode}"\n`;
+  commands += `BARCODE 30,80,"128",80,1,0,2,2,"${data.trackingNumber}"\n`;
+
+  // Sender (Latin chars only usually supported by basic TSPL unless uploaded fonts)
+  // We will assume transliterated or primitive support, or user prints via System Print for Persian
+  commands += `BOX 20,200,780,350,2\n`;
+  commands += `TEXT 30,220,"2",0,1,1,"Sender: ${data.senderName}"\n`;
+  // Simple check for Persian chars, if present, warn user implicitly by printing reversed?
+  // Ideally, use System Print (PDF) for Persian. 
+  
+  // Receiver
+  commands += `BOX 20,360,780,600,2\n`;
+  commands += `TEXT 30,380,"3",0,1,1,"Receiver: ${data.receiverName}"\n`;
+  commands += `TEXT 30,430,"2",0,1,1,"Phone: ${data.receiverPhone}"\n`;
+  commands += `TEXT 30,470,"2",0,1,1,"Post Code: ${data.receiverPostCode}"\n`;
+
+  // Weight
+  commands += `TEXT 30,650,"4",0,1,1,"WEIGHT: ${data.weight} g"\n`;
+
+  // Footer / Order ID
+  commands += `TEXT 30,750,"2",0,1,1,"Order ID: ${data.orderId}"\n`;
 
   // QR Code
-  // X, Y, ECC, CellWidth, Mode, Rotation, Model, Mask, Content
-  // Note: QRCODE command syntax varies by printer firmware version. 
   // Standard TSPL2: QRCODE x,y,ECC,cell_width,mode,rotation,model,mask,"content"
-  // Adjusted position based on label width
-  const qrX = width === 100 ? 550 : 450;
-  commands += `QRCODE ${qrX},400,L,6,A,0,M2,S7,"${data.qrData}"\n`;
-
-  // Footer Box
-  commands += `BOX 20,20,${width * 8 - 20},${height * 8 - 20},4\n`;
+  commands += `QRCODE 550,650,L,5,A,0,M2,S7,"${data.qrData}"\n`;
 
   commands += `PRINT 1\n`;
 
