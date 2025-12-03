@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
 import JsBarcode from 'jsbarcode';
@@ -56,11 +55,11 @@ export const LabelPreview: React.FC<LabelPreviewProps> = ({ data, size }) => {
       <div 
         id="printable-label"
         className={`${containerClass} bg-white text-black border-[3px] border-black relative overflow-hidden flex flex-col box-border font-farsi`}
-        style={{ direction: 'rtl' }}
+        style={{ direction: 'rtl', printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' }}
       >
         
         {/* TOP SECTION: Header | Barcode | QR */}
-        <div className="flex border-b-[3px] border-black h-[32mm] w-full">
+        <div className="flex border-b-[3px] border-black h-[32mm] w-full shrink-0">
            
            {/* Right Side (Logo & Title) */}
            <div className="w-1/4 flex flex-col items-center justify-center text-center p-1 border-l-2 border-black">
@@ -76,9 +75,10 @@ export const LabelPreview: React.FC<LabelPreviewProps> = ({ data, size }) => {
            {/* Center (Barcode & Title) */}
            <div className="w-2/4 flex flex-col items-center justify-start pt-1 border-l-2 border-black">
               <span className="font-extrabold text-[12px] mb-1">برچسب کد رهگیری و اعتبارسنجی 3PDL</span>
-              <div className="w-full flex justify-center px-1">
+              <div className="w-full flex justify-center px-1 overflow-hidden">
                 <svg ref={barcodeRef} className="w-full max-h-[20mm]"></svg>
               </div>
+              <span className="text-[10px] font-mono font-bold tracking-widest">{data.trackingNumber}</span>
            </div>
 
            {/* Left Side (QR) */}
@@ -89,19 +89,19 @@ export const LabelPreview: React.FC<LabelPreviewProps> = ({ data, size }) => {
         </div>
 
         {/* SENDER SECTION */}
-        <div className="border-b-2 border-black p-2 text-right bg-white">
+        <div className="border-b-2 border-black p-2 text-right bg-white shrink-0">
            <div className="flex items-start">
              <span className="font-extrabold text-xs ml-1 whitespace-nowrap">فرستنده:</span>
              <span className="font-bold text-xs">{data.senderName}</span>
            </div>
            <div className="flex items-start mt-1 leading-tight">
              <span className="font-extrabold text-[10px] ml-1">آدرس:</span>
-             <span className="text-[10px] font-medium">{data.senderAddress}</span>
+             <span className="text-[10px] font-medium leading-3">{data.senderAddress}</span>
            </div>
         </div>
 
         {/* RECEIVER SECTION */}
-        <div className="border-b-[3px] border-black p-2 bg-gray-50 flex-1 text-right">
+        <div className="border-b-[3px] border-black p-2 bg-gray-50 flex-1 text-right overflow-hidden">
            <div className="flex items-center mb-1">
              <span className="font-extrabold text-sm ml-1">گیرنده:</span>
              <span className="font-bold text-sm">{data.receiverCity} - {data.receiverName}</span>
@@ -112,7 +112,7 @@ export const LabelPreview: React.FC<LabelPreviewProps> = ({ data, size }) => {
         </div>
 
         {/* BOTTOM GRID */}
-        <div className="grid grid-cols-10 h-[28mm] text-xs">
+        <div className="grid grid-cols-10 h-[28mm] text-xs shrink-0 border-t-0">
            
            {/* Sidebar: Order ID (Actually on the Left in LTR / End in RTL) - col-span-3 */}
            <div className="col-span-3 bg-black text-white flex flex-col items-center justify-between text-center py-2 px-1">
@@ -122,11 +122,11 @@ export const LabelPreview: React.FC<LabelPreviewProps> = ({ data, size }) => {
               </div>
               
               <div className="flex flex-col items-center w-full">
-                 <div className="font-mono text-[9px] font-bold">شناسه سفارش</div>
+                 <div className="font-mono text-[9px] font-bold opacity-80">شناسه سفارش</div>
                  <div className="font-mono text-[11px] font-bold bg-white text-black px-1 rounded my-1 w-full">{data.orderId}</div>
               </div>
 
-              <div className="flex flex-col w-full text-[9px] font-mono leading-tight">
+              <div className="flex flex-col w-full text-[9px] font-mono leading-tight opacity-75">
                   <span>{data.date}</span>
                   <span>{data.time}</span>
               </div>
@@ -166,7 +166,7 @@ export const LabelPreview: React.FC<LabelPreviewProps> = ({ data, size }) => {
                  {/* Price */}
                  <div className="flex-[1.5] flex items-center justify-center px-1 text-center bg-white text-[10px] font-bold leading-tight">
                     <span>{data.price}</span>
-                    <div className="border-2 border-black rounded-full w-5 h-5 flex items-center justify-center ml-1 text-xs">$</div>
+                    <div className="border border-black rounded px-1 ml-1 text-[8px] font-bold">ریال</div>
                  </div>
               </div>
            </div>
