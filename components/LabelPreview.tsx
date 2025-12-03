@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
 import JsBarcode from 'jsbarcode';
@@ -13,10 +14,10 @@ export const LabelPreview: React.FC<LabelPreviewProps> = ({ data, size }) => {
   const qrRef = useRef<HTMLCanvasElement>(null);
 
   const isWide = size === LabelSize.SIZE_100_100;
-  // Approximating screen pixels for mm (3.78 px per mm approx, scaled down for view)
-  const widthClass = isWide ? 'w-[100mm]' : 'w-[80mm]';
+  // CSS mm width logic. Tailwind arbitrary values work well here.
+  const containerClass = isWide ? 'w-[100mm] h-[100mm]' : 'w-[80mm] h-[100mm]';
   
-  // Update Barcode
+  // Update Barcode (Code 128)
   useEffect(() => {
     if (barcodeRef.current && data.barcode) {
       try {
@@ -24,10 +25,10 @@ export const LabelPreview: React.FC<LabelPreviewProps> = ({ data, size }) => {
           format: "CODE128",
           lineColor: "#000",
           width: 2,
-          height: 50,
+          height: 40,
           displayValue: true,
-          fontSize: 12,
-          margin: 0,
+          fontSize: 14,
+          margin: 5,
         });
       } catch (e) {
         console.warn("Barcode generation failed", e);
@@ -39,7 +40,7 @@ export const LabelPreview: React.FC<LabelPreviewProps> = ({ data, size }) => {
   useEffect(() => {
     if (qrRef.current && data.qrData) {
       QRCode.toCanvas(qrRef.current, data.qrData, {
-        width: 100,
+        width: 110,
         margin: 0,
         errorCorrectionLevel: 'M',
       }, (error) => {
@@ -49,65 +50,114 @@ export const LabelPreview: React.FC<LabelPreviewProps> = ({ data, size }) => {
   }, [data.qrData]);
 
   return (
-    <div className="flex flex-col items-center justify-center h-full bg-slate-800 p-6 rounded-lg border-2 border-dashed border-slate-600">
-      <div className="mb-4 text-slate-400 text-sm font-mono">
-        PREVIEW ({isWide ? '100mm x 100mm' : '80mm x 100mm'})
-      </div>
+    <div className="flex flex-col items-center justify-center h-full">
       
-      {/* Label Container - White paper look */}
+      {/* Label Container - Matches provided image layout */}
       <div 
         id="printable-label"
-        className={`${widthClass} h-[100mm] bg-white text-black p-4 shadow-2xl relative overflow-hidden flex flex-col`}
-        style={{ 
-          // Scale transform for fitting in UI if needed, usually CSS zoom or transform
-          // For now relying on the container constraints
-        }}
+        className={`${containerClass} bg-white text-black border-2 border-black relative overflow-hidden flex flex-col box-border font-farsi`}
+        style={{ direction: 'rtl' }}
       >
-        {/* Header */}
-        <div className="flex justify-between items-start mb-4 border-b-2 border-black pb-2">
-          <div>
-            <h1 className="text-2xl font-bold uppercase tracking-tight leading-none">{data.productName || 'PRODUCT NAME'}</h1>
-            <div className="text-sm font-mono mt-1">BATCH: {data.batchNumber}</div>
-          </div>
-          <div className="text-right">
-             <div className="text-xs font-mono">DATE</div>
-             <div className="font-bold">{data.productionDate}</div>
-          </div>
+        
+        {/* TOP SECTION: QR | Barcode | Logo */}
+        <div className="flex border-b-2 border-black h-[35mm]">
+           {/* Left (LTR view) - Actually Right in RTL: Logo & Text */}
+           <div className="flex-1 p-2 flex flex-col items-center justify-center text-center">
+              {/* Post Logo Placeholder - using generic shape */}
+              <div className="w-10 h-10 border-2 border-black rounded-full flex items-center justify-center mb-1">
+                 <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M21 16.5l-3-3v-5l3-3v11zm-5-13.5l-4 4 4 4V3zM3 6.5l3 3v5l-3 3v-11zm5 13.5l4-4-4-4v8zM12 2l-6 6 6 6 6-6-6-6z"/></svg>
+              </div>
+              <span className="font-bold text-xs">شرکت ملی پست</span>
+              <span className="font-bold text-[10px] mt-1">برچسب کد رهگیری</span>
+           </div>
+
+           {/* Center: Barcode */}
+           <div className="flex-[2] flex flex-col items-center justify-center border-l-2 border-r-2 border-black px-1">
+              <svg ref={barcodeRef} className="w-full h-full max-h-[25mm]"></svg>
+           </div>
+
+           {/* Right (LTR view) - Actually Left in RTL: QR */}
+           <div className="flex-1 flex flex-col items-center justify-center p-2 text-center">
+              <canvas ref={qrRef} className="w-[20mm] h-[20mm] mb-1" />
+              <span className="text-[9px] font-bold">Tracking.post.ir</span>
+           </div>
         </div>
 
-        {/* Middle Section */}
-        <div className="flex-1 grid grid-cols-2 gap-4">
-          <div className="flex flex-col justify-center">
-             <div className="text-4xl font-black font-mono tracking-tighter">
-               {data.weight} <span className="text-lg font-normal text-gray-600">{data.unit}</span>
-             </div>
-             <div className="text-xs uppercase text-gray-500 mt-1">Net Weight</div>
-             
-             {/* Persian Text Support (RTL) */}
-             {data.persianText && (
-               <div className="mt-4 font-farsi text-right text-lg border-r-4 border-black pr-2 bg-gray-100 py-1" dir="rtl">
-                 {data.persianText}
-               </div>
-             )}
-          </div>
-          
-          <div className="flex flex-col items-center justify-center border-l-2 border-gray-200 pl-2">
-             <canvas ref={qrRef} className="w-24 h-24 mb-2" />
-             <div className="text-[10px] text-center break-all leading-tight text-gray-500 w-full px-2">
-               {data.qrData}
-             </div>
-          </div>
+        {/* SENDER SECTION (Ferestande) */}
+        <div className="border-b border-black p-2 text-right">
+           <div className="text-xs font-bold mb-1">
+              <span className="ml-1">فرستنده:</span>
+              <span className="font-normal">{data.senderName}</span>
+           </div>
+           <div className="text-[10px] leading-tight">
+              <span className="font-bold ml-1">آدرس:</span>
+              <span>{data.senderAddress}</span>
+           </div>
         </div>
 
-        {/* Description */}
-        <div className="mb-4 text-sm font-medium leading-snug bg-gray-50 p-2 rounded">
-          {data.description || 'Product description area...'}
+        {/* RECEIVER SECTION (Girande) */}
+        <div className="border-b-2 border-black p-2 bg-gray-50 flex-1 text-right">
+           <div className="text-sm font-bold mb-1">
+              <span className="ml-1">گیرنده:</span>
+              <span className="font-normal">{data.receiverCity} - {data.receiverName}</span>
+           </div>
+           <div className="text-xs leading-snug font-bold">
+              {data.receiverAddress}
+           </div>
+           <div className="mt-2 text-[10px]">
+              کد پستی: <span className="font-mono text-sm mx-1">{data.receiverPostCode}</span>
+           </div>
         </div>
 
-        {/* Footer Barcode */}
-        <div className="mt-auto flex justify-center w-full pt-2 border-t-2 border-black">
-          <svg ref={barcodeRef} className="w-full max-w-full h-12"></svg>
+        {/* BOTTOM GRID */}
+        <div className="grid grid-cols-4 h-[25mm] text-xs">
+           
+           {/* Sidebar: Order ID / Custom Note */}
+           <div className="col-span-1 bg-black text-white flex flex-col items-center justify-center text-center p-1">
+              <div className="font-bold mb-1 text-[10px]">انبار مکانیزه</div>
+              <div className="font-bold text-[11px] mb-2">{data.customNote.split(' ')[0]}</div>
+              <div className="text-[9px] font-mono rotate-0 whitespace-nowrap">{data.orderId}</div>
+              <div className="mt-auto text-[9px] font-mono">{data.time}</div>
+              <div className="text-[9px] font-mono">{data.date}</div>
+           </div>
+
+           {/* Info Cells */}
+           <div className="col-span-3 grid grid-rows-3">
+              {/* Row 1: Receiver Details */}
+              <div className="border-b border-l border-black flex items-center px-2">
+                 <span className="font-bold ml-2 w-16">گیرنده:</span>
+                 <span className="truncate">{data.receiverName}</span>
+                 {/* Postal Icon placeholder */}
+                 <span className="mr-auto text-xl">✉</span>
+                 <span className="mr-1 font-mono text-sm">{data.receiverPostCode}</span>
+              </div>
+              
+              {/* Row 2: Phone */}
+              <div className="border-b border-l border-black flex items-center px-2">
+                 <span className="font-bold ml-2 w-16">تلفن:</span>
+                 <span className="font-mono text-sm">{data.receiverPhone}</span>
+                 <span className="mr-auto text-lg">📱</span>
+              </div>
+
+              {/* Row 3: Weight & Price */}
+              <div className="border-l border-black flex items-center px-2 bg-gray-100">
+                 <span className="mr-auto text-lg font-bold flex items-center gap-1">
+                    <span>⚖</span>
+                    <span className="font-mono">{data.weight}</span> 
+                    <span className="text-[10px]">گرم</span>
+                 </span>
+                 <div className="flex items-center gap-1 border-r border-gray-400 pr-2 h-full">
+                    <span className="text-[10px] font-bold">هزینه:</span>
+                    <span className="font-bold text-[10px]">{data.price}</span>
+                 </div>
+              </div>
+           </div>
         </div>
+
+      </div>
+      
+      <div className="mt-2 text-slate-500 text-xs font-mono">
+         {isWide ? '100mm x 100mm' : '80mm x 100mm'}
       </div>
     </div>
   );

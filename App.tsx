@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { LabelForm } from './components/LabelForm';
 import { LabelPreview } from './components/LabelPreview';
@@ -12,20 +13,33 @@ const uuid = () => Math.random().toString(36).substring(2, 9);
 function App() {
   // --- State ---
   const [labelData, setLabelData] = useState<LabelData>({
-    productName: 'INDUSTRIAL SOLVENT X',
-    batchNumber: 'BATCH-001',
-    weight: '0.00',
-    unit: 'kg',
-    productionDate: new Date().toISOString().split('T')[0],
-    description: 'High grade industrial solvent for machinery.',
-    barcode: '123456789',
-    qrData: 'https://example.com/product/123',
-    persianText: 'حلال صنعتی',
+    trackingNumber: '04515000010732',
+    orderId: '200-40236801',
+    
+    senderName: 'شرکت بازاریابان ایرانیان زمین (BIZ)',
+    senderCity: 'تهران',
+    senderAddress: 'تهران، کد پستی: 1577646813 ، تلفن پشتیبانی: 43072-021',
+    
+    receiverName: 'پیمان معینی',
+    receiverCity: 'استان زنجان - شهر خرمدره',
+    receiverAddress: 'شهرک گلدشت، خیابان پروین اعتصامی، انتهای خیابان مروارید، نبش کوچه نگین 3، پلاک 1، واحد 1',
+    receiverPostCode: '4571310004',
+    receiverPhone: '09100277226',
+    
+    weight: '205', // Grams
+    price: 'طبق توافق پرداخت شده',
+    paymentMethod: 'Prepaid',
+    date: '1404-04-22',
+    time: '13:30:05',
+    
+    barcode: '04515000010732',
+    qrData: 'https://tracking.post.ir/?id=04515000010732',
+    customNote: 'انبار مکانیزه Bizmlm.ir'
   });
   
-  const [labelSize, setLabelSize] = useState<LabelSize>(LabelSize.SIZE_80_100);
+  const [labelSize, setLabelSize] = useState<LabelSize>(LabelSize.SIZE_100_100);
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [scaleDevice, setScaleDevice] = useState<SerialDevice>({ port: null, status: 'disconnected', baudRate: 19200 });
+  const [scaleDevice, setScaleDevice] = useState<SerialDevice>({ port: null, status: 'disconnected', baudRate: 9600 });
   const [printerDevice, setPrinterDevice] = useState<SerialDevice>({ port: null, status: 'disconnected', baudRate: 9600 });
   const [printerType, setPrinterType] = useState<PrinterType>(PrinterType.SYSTEM);
   const [scaleReader, setScaleReader] = useState<ReadableStreamDefaultReader<string> | null>(null);
@@ -48,8 +62,6 @@ function App() {
           const ports = await navigator.serial.getPorts();
           if (ports.length > 0) {
              addLog(`System: Found ${ports.length} authorized serial port(s).`, 'info');
-             // Optionally we could try to auto-connect to the first one as scale if it matches criteria
-             // But safer to let user click connect to choose purpose
           }
         } catch (e) {
           console.error("Serial access error", e);
@@ -69,7 +81,7 @@ function App() {
     }
     try {
       addLog("Requesting Scale Port...", 'info');
-      // Filter for common scales? usually raw CDC
+      // Scale baud rates vary: 9600 is common, but some are 19200 or 2400.
       const port = await navigator.serial.requestPort();
       await port.open({ baudRate: scaleDevice.baudRate });
       
@@ -95,19 +107,33 @@ function App() {
         if (done) break;
         if (value) {
           buffer += value;
-          // Simple parsing logic: assume scale sends line by line or frames
-          // Looking for simple number patterns like " 12.50 kg"
-          // This regex is generic for example purposes
+          
+          // Process line by line
           const lines = buffer.split(/[\r\n]+/);
+          
+          // If we have more than one part, we have at least one full line
           if (lines.length > 1) {
-             const completeLine = lines[0];
-             buffer = lines.slice(1).join('\n');
+             // Keep the last part in buffer (it might be incomplete)
+             buffer = lines.pop() || "";
              
-             // Try to extract weight
-             const match = completeLine.match(/([0-9]+\.[0-9]+)/);
-             if (match) {
-               setLabelData(prev => ({ ...prev, weight: match[1] }));
-               addLog(`Weight Received: ${match[1]}`, 'data');
+             // Process all complete lines
+             for (const line of lines) {
+               if (!line.trim()) continue;
+               
+               // Regex to find weight:
+               // Looks for: optional non-digit chars, then float number, then optional unit
+               // Example matches: "ST,GS,+  1.200kg", "1.20", "Weight: 1200"
+               const weightMatch = line.match(/([0-9]+\.?[0-9]*)/);
+               
+               if (weightMatch && weightMatch[1]) {
+                 const rawWeight = parseFloat(weightMatch[1]);
+                 // Filter out noise/zeros if needed, or update immediately
+                 if (!isNaN(rawWeight)) {
+                   setLabelData(prev => ({ ...prev, weight: rawWeight.toString() }));
+                   // Only log every few seconds/changes to avoid spam, or log debug:
+                   // addLog(`Weight: ${rawWeight}`, 'data'); 
+                 }
+               }
              }
           }
         }
@@ -145,13 +171,9 @@ function App() {
   };
 
   const validateForm = (): boolean => {
-    if (!labelData.productName.trim()) {
-      addLog("Validation Error: Product Name is required.", 'error');
+    if (!labelData.trackingNumber.trim()) {
+      addLog("Validation Error: Tracking Number is required.", 'error');
       return false;
-    }
-    if (parseFloat(labelData.weight) <= 0 && labelData.weight !== '') {
-       addLog("Validation Error: Weight must be greater than 0.", 'warning');
-       // Not returning false here to allow manual override, just warning
     }
     return true;
   };
@@ -194,7 +216,7 @@ function App() {
       addLog("Capturing preview...", 'info');
       const canvas = await html2canvas(element, { scale: 3 }); // High Res
       const link = document.createElement('a');
-      link.download = `Label_${labelData.productName.replace(/\s+/g, '_')}_${labelData.batchNumber}.png`;
+      link.download = `Label_${labelData.trackingNumber}.png`;
       link.href = canvas.toDataURL();
       link.click();
       addLog("Label exported as PNG", 'success');
@@ -209,7 +231,7 @@ function App() {
       <header className="h-14 bg-slate-950 border-b border-slate-700 flex items-center justify-between px-4 shrink-0">
         <div className="flex items-center gap-2">
            <div className="w-8 h-8 bg-amber-500 rounded flex items-center justify-center font-bold text-slate-900">LP</div>
-           <h1 className="font-bold text-lg tracking-tight">INDUSTRIAL <span className="text-amber-500">LABEL</span> MASTER</h1>
+           <h1 className="font-bold text-lg tracking-tight">IRAN POST <span className="text-amber-500">LABELER</span></h1>
         </div>
         
         {/* Hardware Status Indicators */}
@@ -262,7 +284,7 @@ function App() {
              <button 
                onClick={printLabel}
                className="bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 px-8 rounded shadow-lg flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-               disabled={!labelData.productName}
+               disabled={!labelData.trackingNumber}
              >
                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
