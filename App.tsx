@@ -81,8 +81,9 @@ function App() {
     }
     try {
       addLog("Requesting Scale Port...", 'info');
-      // Scale baud rates vary: 9600 is common, but some are 19200 or 2400.
+      // Request port
       const port = await navigator.serial.requestPort();
+      // Most scales are 9600, but some are 2400 or 19200.
       await port.open({ baudRate: scaleDevice.baudRate });
       
       setScaleDevice(prev => ({ ...prev, port, status: 'connected' }));
@@ -100,47 +101,52 @@ function App() {
   };
 
   const readScaleData = async (reader: ReadableStreamDefaultReader<string>) => {
+    let buffer = "";
     try {
-      let buffer = "";
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
         if (value) {
           buffer += value;
           
-          // Process line by line
-          const lines = buffer.split(/[\r\n]+/);
+          // Split by newline (handles \n or \r\n)
+          const parts = buffer.split(/\r?\n/);
           
-          // If we have more than one part, we have at least one full line
-          if (lines.length > 1) {
-             // Keep the last part in buffer (it might be incomplete)
-             buffer = lines.pop() || "";
-             
-             // Process all complete lines
-             for (const line of lines) {
-               if (!line.trim()) continue;
-               
-               // Regex to find weight:
-               // Looks for: optional non-digit chars, then float number, then optional unit
-               // Example matches: "ST,GS,+  1.200kg", "1.20", "Weight: 1200"
-               const weightMatch = line.match(/([0-9]+\.?[0-9]*)/);
-               
-               if (weightMatch && weightMatch[1]) {
-                 const rawWeight = parseFloat(weightMatch[1]);
-                 // Filter out noise/zeros if needed, or update immediately
-                 if (!isNaN(rawWeight)) {
+          // The last part is likely incomplete, save it back to buffer
+          buffer = parts.pop() || "";
+          
+          // Process complete lines
+          for (const line of parts) {
+            const cleanLine = line.trim();
+            if (cleanLine.length > 0) {
+              // Log raw data for debugging
+              addLog(`RAW SCALE: "${cleanLine}"`, 'data');
+
+              // Regex Logic:
+              // 1. Look for numbers that might be weight.
+              // 2. Handles: "12.50", "12.50kg", "ST,GS,+ 12.50kg", "Weight: 12.50"
+              const weightMatch = cleanLine.match(/([0-9]+\.?[0-9]*)/);
+              
+              if (weightMatch && weightMatch[1]) {
+                const rawWeight = parseFloat(weightMatch[1]);
+                
+                // Filter out unrealistic weights (e.g. 0 or empty) or specific timestamps
+                // Most label scales are 0.000 to 50.000 range.
+                if (!isNaN(rawWeight) && rawWeight > 0) {
+                   // Optional: If scale sends kg, convert to g if needed. 
+                   // Current logic assumes input is consistent with display requirement.
                    setLabelData(prev => ({ ...prev, weight: rawWeight.toString() }));
-                   // Only log every few seconds/changes to avoid spam, or log debug:
-                   // addLog(`Weight: ${rawWeight}`, 'data'); 
-                 }
-               }
-             }
+                }
+              }
+            }
           }
         }
       }
     } catch (err) {
       console.error(err);
       addLog("Scale Read Error", 'error');
+    } finally {
+      reader.releaseLock();
     }
   };
 

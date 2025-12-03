@@ -14,7 +14,7 @@ export const LabelPreview: React.FC<LabelPreviewProps> = ({ data, size }) => {
   const qrRef = useRef<HTMLCanvasElement>(null);
 
   const isWide = size === LabelSize.SIZE_100_100;
-  // CSS mm width logic. Tailwind arbitrary values work well here.
+  // CSS mm width logic.
   const containerClass = isWide ? 'w-[100mm] h-[100mm]' : 'w-[80mm] h-[100mm]';
   
   // Update Barcode (Code 128)
@@ -28,7 +28,7 @@ export const LabelPreview: React.FC<LabelPreviewProps> = ({ data, size }) => {
           height: 40,
           displayValue: true,
           fontSize: 14,
-          margin: 5,
+          margin: 0,
         });
       } catch (e) {
         console.warn("Barcode generation failed", e);
@@ -40,8 +40,8 @@ export const LabelPreview: React.FC<LabelPreviewProps> = ({ data, size }) => {
   useEffect(() => {
     if (qrRef.current && data.qrData) {
       QRCode.toCanvas(qrRef.current, data.qrData, {
-        width: 110,
-        margin: 0,
+        width: 100,
+        margin: 1,
         errorCorrectionLevel: 'M',
       }, (error) => {
         if (error) console.warn("QR generation failed", error);
@@ -55,100 +55,118 @@ export const LabelPreview: React.FC<LabelPreviewProps> = ({ data, size }) => {
       {/* Label Container - Matches provided image layout */}
       <div 
         id="printable-label"
-        className={`${containerClass} bg-white text-black border-2 border-black relative overflow-hidden flex flex-col box-border font-farsi`}
+        className={`${containerClass} bg-white text-black border-[3px] border-black relative overflow-hidden flex flex-col box-border font-farsi`}
         style={{ direction: 'rtl' }}
       >
         
-        {/* TOP SECTION: QR | Barcode | Logo */}
-        <div className="flex border-b-2 border-black h-[35mm]">
-           {/* Left (LTR view) - Actually Right in RTL: Logo & Text */}
-           <div className="flex-1 p-2 flex flex-col items-center justify-center text-center">
-              {/* Post Logo Placeholder - using generic shape */}
-              <div className="w-10 h-10 border-2 border-black rounded-full flex items-center justify-center mb-1">
-                 <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M21 16.5l-3-3v-5l3-3v11zm-5-13.5l-4 4 4 4V3zM3 6.5l3 3v5l-3 3v-11zm5 13.5l4-4-4-4v8zM12 2l-6 6 6 6 6-6-6-6z"/></svg>
+        {/* TOP SECTION: Header | Barcode | QR */}
+        <div className="flex border-b-[3px] border-black h-[32mm] w-full">
+           
+           {/* Right Side (Logo & Title) */}
+           <div className="w-1/4 flex flex-col items-center justify-center text-center p-1 border-l-2 border-black">
+              <div className="w-8 h-8 rounded-full border-2 border-black flex items-center justify-center mb-1">
+                 {/* Stylized Post Logo (Bird shape approximation) */}
+                 <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M2 12l10-10 10 10-2 2-8-8-8 8-2-2z" />
+                 </svg>
               </div>
-              <span className="font-bold text-xs">شرکت ملی پست</span>
-              <span className="font-bold text-[10px] mt-1">برچسب کد رهگیری</span>
+              <span className="font-extrabold text-[10px] leading-tight">شرکت ملی پست</span>
            </div>
 
-           {/* Center: Barcode */}
-           <div className="flex-[2] flex flex-col items-center justify-center border-l-2 border-r-2 border-black px-1">
-              <svg ref={barcodeRef} className="w-full h-full max-h-[25mm]"></svg>
+           {/* Center (Barcode & Title) */}
+           <div className="w-2/4 flex flex-col items-center justify-start pt-1 border-l-2 border-black">
+              <span className="font-extrabold text-[12px] mb-1">برچسب کد رهگیری و اعتبارسنجی 3PDL</span>
+              <div className="w-full flex justify-center px-1">
+                <svg ref={barcodeRef} className="w-full max-h-[20mm]"></svg>
+              </div>
            </div>
 
-           {/* Right (LTR view) - Actually Left in RTL: QR */}
-           <div className="flex-1 flex flex-col items-center justify-center p-2 text-center">
-              <canvas ref={qrRef} className="w-[20mm] h-[20mm] mb-1" />
-              <span className="text-[9px] font-bold">Tracking.post.ir</span>
+           {/* Left Side (QR) */}
+           <div className="w-1/4 flex flex-col items-center justify-center p-1">
+              <canvas ref={qrRef} className="w-[18mm] h-[18mm]" />
+              <span className="text-[8px] font-bold mt-1">Tracking.post.ir</span>
            </div>
         </div>
 
-        {/* SENDER SECTION (Ferestande) */}
-        <div className="border-b border-black p-2 text-right">
-           <div className="text-xs font-bold mb-1">
-              <span className="ml-1">فرستنده:</span>
-              <span className="font-normal">{data.senderName}</span>
+        {/* SENDER SECTION */}
+        <div className="border-b-2 border-black p-2 text-right bg-white">
+           <div className="flex items-start">
+             <span className="font-extrabold text-xs ml-1 whitespace-nowrap">فرستنده:</span>
+             <span className="font-bold text-xs">{data.senderName}</span>
            </div>
-           <div className="text-[10px] leading-tight">
-              <span className="font-bold ml-1">آدرس:</span>
-              <span>{data.senderAddress}</span>
+           <div className="flex items-start mt-1 leading-tight">
+             <span className="font-extrabold text-[10px] ml-1">آدرس:</span>
+             <span className="text-[10px] font-medium">{data.senderAddress}</span>
            </div>
         </div>
 
-        {/* RECEIVER SECTION (Girande) */}
-        <div className="border-b-2 border-black p-2 bg-gray-50 flex-1 text-right">
-           <div className="text-sm font-bold mb-1">
-              <span className="ml-1">گیرنده:</span>
-              <span className="font-normal">{data.receiverCity} - {data.receiverName}</span>
+        {/* RECEIVER SECTION */}
+        <div className="border-b-[3px] border-black p-2 bg-gray-50 flex-1 text-right">
+           <div className="flex items-center mb-1">
+             <span className="font-extrabold text-sm ml-1">گیرنده:</span>
+             <span className="font-bold text-sm">{data.receiverCity} - {data.receiverName}</span>
            </div>
-           <div className="text-xs leading-snug font-bold">
+           <div className="text-xs font-bold leading-snug pr-1">
               {data.receiverAddress}
-           </div>
-           <div className="mt-2 text-[10px]">
-              کد پستی: <span className="font-mono text-sm mx-1">{data.receiverPostCode}</span>
            </div>
         </div>
 
         {/* BOTTOM GRID */}
-        <div className="grid grid-cols-4 h-[25mm] text-xs">
+        <div className="grid grid-cols-10 h-[28mm] text-xs">
            
-           {/* Sidebar: Order ID / Custom Note */}
-           <div className="col-span-1 bg-black text-white flex flex-col items-center justify-center text-center p-1">
-              <div className="font-bold mb-1 text-[10px]">انبار مکانیزه</div>
-              <div className="font-bold text-[11px] mb-2">{data.customNote.split(' ')[0]}</div>
-              <div className="text-[9px] font-mono rotate-0 whitespace-nowrap">{data.orderId}</div>
-              <div className="mt-auto text-[9px] font-mono">{data.time}</div>
-              <div className="text-[9px] font-mono">{data.date}</div>
+           {/* Sidebar: Order ID (Actually on the Left in LTR / End in RTL) - col-span-3 */}
+           <div className="col-span-3 bg-black text-white flex flex-col items-center justify-between text-center py-2 px-1">
+              <div>
+                <div className="font-extrabold text-[11px] mb-1">انبار مکانیزه</div>
+                <div className="font-bold text-[10px] text-amber-400">{data.customNote.split(' ')[1] || 'Bizmlm.ir'}</div>
+              </div>
+              
+              <div className="flex flex-col items-center w-full">
+                 <div className="font-mono text-[9px] font-bold">شناسه سفارش</div>
+                 <div className="font-mono text-[11px] font-bold bg-white text-black px-1 rounded my-1 w-full">{data.orderId}</div>
+              </div>
+
+              <div className="flex flex-col w-full text-[9px] font-mono leading-tight">
+                  <span>{data.date}</span>
+                  <span>{data.time}</span>
+              </div>
            </div>
 
-           {/* Info Cells */}
-           <div className="col-span-3 grid grid-rows-3">
-              {/* Row 1: Receiver Details */}
-              <div className="border-b border-l border-black flex items-center px-2">
-                 <span className="font-bold ml-2 w-16">گیرنده:</span>
-                 <span className="truncate">{data.receiverName}</span>
-                 {/* Postal Icon placeholder */}
-                 <span className="mr-auto text-xl">✉</span>
-                 <span className="mr-1 font-mono text-sm">{data.receiverPostCode}</span>
+           {/* Info Cells - col-span-7 */}
+           <div className="col-span-7 grid grid-rows-3 text-black">
+              
+              {/* Row 1: Post Code */}
+              <div className="border-b border-black flex items-center justify-between px-2 bg-white">
+                 <div className="flex items-center">
+                    <span className="font-extrabold mr-1">کد پستی:</span>
+                 </div>
+                 <span className="font-mono text-sm font-bold tracking-wider">{data.receiverPostCode}</span>
+                 <span className="text-lg">✉</span>
               </div>
               
               {/* Row 2: Phone */}
-              <div className="border-b border-l border-black flex items-center px-2">
-                 <span className="font-bold ml-2 w-16">تلفن:</span>
-                 <span className="font-mono text-sm">{data.receiverPhone}</span>
-                 <span className="mr-auto text-lg">📱</span>
+              <div className="border-b border-black flex items-center justify-between px-2 bg-white">
+                 <div className="flex items-center">
+                    <span className="font-extrabold mr-1">تلفن:</span>
+                 </div>
+                 <span className="font-mono text-sm font-bold">{data.receiverPhone}</span>
+                 <span className="text-lg">📱</span>
               </div>
 
               {/* Row 3: Weight & Price */}
-              <div className="border-l border-black flex items-center px-2 bg-gray-100">
-                 <span className="mr-auto text-lg font-bold flex items-center gap-1">
-                    <span>⚖</span>
-                    <span className="font-mono">{data.weight}</span> 
-                    <span className="text-[10px]">گرم</span>
-                 </span>
-                 <div className="flex items-center gap-1 border-r border-gray-400 pr-2 h-full">
-                    <span className="text-[10px] font-bold">هزینه:</span>
-                    <span className="font-bold text-[10px]">{data.price}</span>
+              <div className="flex h-full">
+                 {/* Weight */}
+                 <div className="flex-1 border-l-2 border-black flex items-center justify-between px-2 bg-gray-100">
+                     <div className="flex items-center gap-1 font-bold">
+                        <span className="text-lg">⚖</span>
+                        <span className="font-mono text-sm">{data.weight}</span> 
+                        <span className="text-[10px]">گرم</span>
+                     </div>
+                 </div>
+                 {/* Price */}
+                 <div className="flex-[1.5] flex items-center justify-center px-1 text-center bg-white text-[10px] font-bold leading-tight">
+                    <span>{data.price}</span>
+                    <div className="border-2 border-black rounded-full w-5 h-5 flex items-center justify-center ml-1 text-xs">$</div>
                  </div>
               </div>
            </div>
