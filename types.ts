@@ -15,6 +15,7 @@ export interface LabelData {
   receiverAddress: string;
   receiverPostCode: string;
   receiverPhone: string;
+  receiverMobile: string; // New field
   
   // Package Info
   weight: string;
@@ -50,6 +51,7 @@ export enum PrinterType {
 export enum LabelSize {
   SIZE_80_100 = '80x100', // Standard thermal
   SIZE_100_100 = '100x100', // Wide thermal
+  SIZE_100_80 = '100x80', // Wide short thermal (New Standard)
 }
 
 // Global declaration for Web Serial API
