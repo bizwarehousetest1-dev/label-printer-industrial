@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { LabelForm } from './components/LabelForm';
 import { LabelPreview } from './components/LabelPreview';
@@ -23,7 +24,8 @@ function App() {
     receiverCity: 'استان زنجان - شهر خرمدره',
     receiverAddress: 'شهرک گلدشت، خیابان پروین اعتصامی، انتهای خیابان مروارید، نبش کوچه نگین 3، پلاک 1، واحد 1',
     receiverPostCode: '4571310004',
-    receiverPhone: '09100277226',
+    receiverPhone: '02435520000',
+    receiverMobile: '09100277226',
     
     weight: '205', // Grams
     price: 'طبق توافق پرداخت شده',
@@ -36,16 +38,19 @@ function App() {
     customNote: 'انبار مکانیزه Bizmlm.ir'
   });
   
-  const [labelSize, setLabelSize] = useState<LabelSize>(LabelSize.SIZE_100_100);
+  const [labelSize, setLabelSize] = useState<LabelSize>(LabelSize.SIZE_100_80);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [scaleDevice, setScaleDevice] = useState<SerialDevice>({ port: null, status: 'disconnected', baudRate: 9600 });
   const [printerDevice, setPrinterDevice] = useState<SerialDevice>({ port: null, status: 'disconnected', baudRate: 9600 });
   const [printerType, setPrinterType] = useState<PrinterType>(PrinterType.SYSTEM);
   const [scaleReader, setScaleReader] = useState<ReadableStreamDefaultReader<string> | null>(null);
 
+  // Store the promise that resolves when the pipeTo finishes
+  const scaleReadableStreamClosedRef = useRef<Promise<void> | null>(null);
+
   // --- Logging Helper ---
   const addLog = (message: string, type: LogEntry['type'] = 'info') => {
-    setLogs(prev => [...prev.slice(-49), { // Keep last 50 logs
+    setLogs(prev => [...prev.slice(-49), { 
       id: uuid(),
       timestamp: new Date().toLocaleTimeString(),
       message,
@@ -80,9 +85,7 @@ function App() {
     }
     try {
       addLog("Requesting Scale Port...", 'info');
-      // Request port
       const port = await navigator.serial.requestPort();
-      // Most scales are 9600, but some are 2400 or 19200.
       await port.open({ baudRate: scaleDevice.baudRate });
       
       setScaleDevice(prev => ({ ...prev, port, status: 'connected' }));
@@ -90,6 +93,8 @@ function App() {
       
       const textDecoder = new TextDecoderStream();
       const readableStreamClosed = port.readable!.pipeTo(textDecoder.writable);
+      scaleReadableStreamClosedRef.current = readableStreamClosed;
+
       const reader = textDecoder.readable.getReader();
       setScaleReader(reader);
 
@@ -101,88 +106,116 @@ function App() {
 
   const readScaleData = async (reader: ReadableStreamDefaultReader<string>) => {
     let buffer = "";
+    let flushTimeout: any = null;
+
+    const processLine = (line: string) => {
+      const cleanLine = line.trim();
+      if (!cleanLine) return;
+      
+      addLog(`Line: "${cleanLine}"`, 'info');
+
+      // Robust regex for numbers
+      const candidates = cleanLine.match(/[-+]?\d*\.?\d+/g); 
+
+      if (candidates && candidates.length > 0) {
+        // Iterate BACKWARDS to find the most recent valid weight
+        for (let i = candidates.length - 1; i >= 0; i--) {
+          const candidate = candidates[i];
+          const val = parseFloat(candidate);
+          
+          if (!isNaN(val) && val > 0) {
+             setLabelData(prev => {
+                if (prev.weight !== val.toString()) {
+                    addLog(`Auto-fill Weight: ${val}`, 'success');
+                    return { ...prev, weight: val.toString() };
+                }
+                return prev;
+             });
+             break; 
+          }
+        }
+      }
+    };
+
     try {
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
         if (value) {
+          if (flushTimeout) clearTimeout(flushTimeout);
+
+          const safeRaw = value.replace(/\r/g, '\\r').replace(/\n/g, '\\n');
+          addLog(`Raw: "${safeRaw}"`, 'data');
+
           buffer += value;
           
-          // Split by newline (handles \n or \r\n)
-          // Some scales end with \r, others \n. We split by any line terminator.
-          const parts = buffer.split(/\r?\n/);
-          
-          // The last part is likely incomplete, save it back to buffer
-          buffer = parts.pop() || "";
-          
-          // Process complete lines
-          for (const line of parts) {
-            const cleanLine = line.trim();
-            if (cleanLine.length > 0) {
-              // 1. LOG RAW DATA for debugging
-              addLog(`RX: "${cleanLine}"`, 'data');
-
-              // 2. FIND CANDIDATES
-              // Look for any sequence of digits, optionally with decimals
-              const candidates = cleanLine.match(/(\d+(\.\d+)?)/g);
-              
-              if (candidates) {
-                for (const candidate of candidates) {
-                  const val = parseFloat(candidate);
-                  
-                  // Filter noise: weight usually > 0.
-                  // Avoid parsing years like 2024 or 1404 as weight if possible, 
-                  // but hard to know context. We assume weight is the "main" number.
-                  if (!isNaN(val) && val > 0) {
-                     addLog(`Candidate: ${val}`, 'info');
-                     
-                     // 3. UPDATE STATE
-                     // Only update if value changed to prevent infinite re-renders/logs
-                     setLabelData(prev => {
-                        if (prev.weight !== val.toString()) {
-                            addLog(`Auto-filling Weight: ${val}`, 'success');
-                            return { ...prev, weight: val.toString() };
-                        }
-                        return prev;
-                     });
-                     
-                     // If we found a valid weight, break inner loop to avoid using secondary numbers (like date parts) 
-                     // unless specific logic requires it.
-                     break; 
-                  }
-                }
-              }
-            }
+          if (buffer.length > 1000) {
+             buffer = buffer.slice(-1000);
           }
+          
+          const parts = buffer.split(/\r\n|\n|\r/);
+          const incompletePart = parts.pop() || "";
+          
+          for (const part of parts) {
+            processLine(part);
+          }
+
+          buffer = incompletePart;
+
+          // Time-based flush
+          flushTimeout = setTimeout(() => {
+             if (buffer.trim().length > 0) {
+                addLog(`Buffer Flush: "${buffer}"`, 'warning');
+                processLine(buffer);
+                buffer = "";
+             }
+          }, 150);
         }
       }
     } catch (err) {
       console.error(err);
       addLog("Scale Read Error", 'error');
     } finally {
+      if (flushTimeout) clearTimeout(flushTimeout);
       reader.releaseLock();
     }
   };
 
   const disconnectScale = async () => {
     if (scaleReader) {
-      await scaleReader.cancel();
+      try {
+        await scaleReader.cancel();
+      } catch (e) {
+        console.warn("Error canceling reader", e);
+      }
       setScaleReader(null);
     }
+    
+    if (scaleReadableStreamClosedRef.current) {
+      try {
+        await scaleReadableStreamClosedRef.current;
+      } catch (e) {}
+      scaleReadableStreamClosedRef.current = null;
+    }
+
     if (scaleDevice.port) {
-      await scaleDevice.port.close();
+      try {
+        await scaleDevice.port.close();
+        addLog("Scale Disconnected", 'info');
+      } catch (e: any) {
+        addLog(`Error closing port: ${e.message}`, 'error');
+      }
       setScaleDevice(prev => ({ ...prev, port: null, status: 'disconnected' }));
-      addLog("Scale Disconnected", 'info');
     }
   };
 
-  // --- Printer Logic (Web Serial for TSPL) ---
+  // --- Printer Logic ---
   const connectPrinter = async () => {
      if (!navigator.serial) return;
      try {
        addLog("Requesting Printer Port...", 'info');
        const port = await navigator.serial.requestPort();
-       await port.open({ baudRate: 9600 }); // Standard TSPL baud
+       await port.open({ baudRate: 9600 });
        setPrinterDevice({ port, status: 'connected', baudRate: 9600 });
        addLog("TSPL Printer Connected", 'success');
      } catch (err: any) {
@@ -202,12 +235,10 @@ function App() {
     if (!validateForm()) return;
 
     if (printerType === PrinterType.SYSTEM) {
-      // Browser Print
       addLog("Initiating System Print...", 'info');
       window.print();
       addLog("Sent to System Spooler", 'success');
     } else {
-      // Serial TSPL Print
       if (!printerDevice.port || printerDevice.status !== 'connected') {
         addLog("Serial Printer not connected!", 'error');
         return;
@@ -226,15 +257,13 @@ function App() {
     }
   };
 
-  // --- Export Logic ---
   const exportAsImage = async () => {
     if (!validateForm()) return;
-    
     const element = document.getElementById('printable-label');
     if (!element) return;
     try {
       addLog("Capturing preview...", 'info');
-      const canvas = await html2canvas(element, { scale: 3 }); // High Res
+      const canvas = await html2canvas(element, { scale: 3 });
       const link = document.createElement('a');
       link.download = `Label_${labelData.trackingNumber}.png`;
       link.href = canvas.toDataURL();
@@ -246,87 +275,148 @@ function App() {
   };
 
   return (
-    <div className="h-screen w-full flex flex-col overflow-hidden bg-slate-900 text-slate-100">
-      {/* Top Bar / Header */}
-      <header className="h-14 bg-slate-950 border-b border-slate-700 flex items-center justify-between px-4 shrink-0">
-        <div className="flex items-center gap-2">
-           <div className="w-8 h-8 bg-amber-500 rounded flex items-center justify-center font-bold text-slate-900">LP</div>
-           <h1 className="font-bold text-lg tracking-tight">IRAN POST <span className="text-amber-500">LABELER</span></h1>
+    <div className="h-screen w-full flex flex-col overflow-hidden bg-slate-950 text-slate-100 font-sans">
+      
+      {/* 
+        HEADER
+        - Uses drag region for Electron titlebar feel 
+        - Gradient background
+        - Flexbox layout for responsiveness
+      */}
+      <header 
+        className="h-16 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border-b border-slate-800 flex items-center justify-between px-6 shrink-0 shadow-md z-10"
+        style={{ WebkitAppRegion: 'drag' } as any}
+      >
+        
+        {/* Left: Brand */}
+        <div className="flex items-center gap-3 w-1/4 select-none">
+           <div className="w-9 h-9 bg-gradient-to-br from-amber-500 to-amber-600 rounded-lg shadow flex items-center justify-center font-black text-slate-900 text-lg">A</div>
+           <h1 className="font-bold text-xl tracking-tight text-slate-100">
+             ARSH <span className="text-[#ff6f6a]">EXPRESS</span>
+           </h1>
         </div>
         
-        {/* Hardware Status Indicators */}
-        <div className="flex items-center gap-4">
-           {/* Scale Status */}
-           <div className="flex items-center gap-2 bg-slate-900 px-3 py-1 rounded border border-slate-800">
-             <div className={`w-2 h-2 rounded-full ${scaleDevice.status === 'connected' ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
-             <span className="text-xs font-mono text-slate-400">SCALE: {scaleDevice.status === 'connected' ? 'ONLINE' : 'OFFLINE'}</span>
-             {scaleDevice.status === 'disconnected' ? (
-                <button onClick={connectScale} className="text-xs bg-slate-800 hover:bg-slate-700 px-2 py-0.5 rounded border border-slate-600">CONN</button>
-             ) : (
-                <button onClick={disconnectScale} className="text-xs text-red-400 hover:text-red-300 ml-1">DISC</button>
-             )}
+        {/* Center: Hardware Widgets */}
+        <div 
+          className="flex-1 flex items-center justify-center gap-6"
+          style={{ WebkitAppRegion: 'no-drag' } as any}
+        >
+           {/* Scale Widget */}
+           <div className="flex items-center gap-3 bg-slate-800/50 px-4 py-1.5 rounded-full border border-slate-700/50 backdrop-blur-sm transition-colors hover:bg-slate-800">
+             <div className="flex items-center gap-2">
+                <div className={`w-2.5 h-2.5 rounded-full shadow-sm ${scaleDevice.status === 'connected' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
+                <span className="text-xs font-bold text-slate-400 tracking-wide">SCALE</span>
+             </div>
+             
+             <div className="h-4 w-[1px] bg-slate-700"></div>
+
+             <select 
+               className="bg-transparent text-xs text-slate-300 font-mono outline-none cursor-pointer hover:text-white"
+               value={scaleDevice.baudRate}
+               onChange={(e) => setScaleDevice(prev => ({ ...prev, baudRate: parseInt(e.target.value) }))}
+               disabled={scaleDevice.status === 'connected'}
+             >
+                {[1200, 2400, 4800, 9600, 19200, 38400, 115200].map(r => (
+                  <option key={r} value={r} className="bg-slate-800">{r}</option>
+                ))}
+             </select>
+
+             <button 
+                onClick={scaleDevice.status === 'connected' ? disconnectScale : connectScale}
+                className={`text-[10px] font-bold px-2 py-0.5 rounded border transition-colors ${
+                  scaleDevice.status === 'connected' 
+                    ? 'border-rose-500/30 text-rose-400 hover:bg-rose-950' 
+                    : 'border-slate-600 text-slate-400 hover:bg-slate-700 hover:text-white'
+                }`}
+             >
+               {scaleDevice.status === 'connected' ? 'DISC' : 'CONN'}
+             </button>
            </div>
 
-           {/* Printer Status */}
-           <div className="flex items-center gap-2 bg-slate-900 px-3 py-1 rounded border border-slate-800">
-             <div className={`w-2 h-2 rounded-full ${printerDevice.status === 'connected' ? 'bg-green-500' : 'bg-slate-600'}`} />
+           {/* Printer Widget */}
+           <div className="flex items-center gap-3 bg-slate-800/50 px-4 py-1.5 rounded-full border border-slate-700/50 backdrop-blur-sm transition-colors hover:bg-slate-800">
+             <div className="flex items-center gap-2">
+                <div className={`w-2.5 h-2.5 rounded-full shadow-sm ${printerDevice.status === 'connected' ? 'bg-emerald-500' : 'bg-slate-600'}`} />
+                <span className="text-xs font-bold text-slate-400 tracking-wide">PRINTER</span>
+             </div>
+             
+             <div className="h-4 w-[1px] bg-slate-700"></div>
+
              <select 
                value={printerType} 
                onChange={(e) => setPrinterType(e.target.value as PrinterType)}
-               className="bg-transparent text-xs font-mono text-slate-400 outline-none border-none cursor-pointer"
+               className="bg-transparent text-xs text-slate-300 font-mono outline-none cursor-pointer hover:text-white"
              >
-               <option value={PrinterType.SYSTEM}>SYS / USB</option>
-               <option value={PrinterType.SERIAL_TSPL}>SERIAL TSPL</option>
+               <option value={PrinterType.SYSTEM} className="bg-slate-800">SYSTEM / USB</option>
+               <option value={PrinterType.SERIAL_TSPL} className="bg-slate-800">SERIAL TSPL</option>
              </select>
              
              {printerType === PrinterType.SERIAL_TSPL && (
-                printerDevice.status === 'disconnected' ? (
-                  <button onClick={connectPrinter} className="text-xs bg-slate-800 hover:bg-slate-700 px-2 py-0.5 rounded border border-slate-600">CONN</button>
-                ) : printerDevice.status === 'connected' ? (
-                  <span className="text-xs text-green-500">READY</span>
-                ) : null
+                 <button 
+                  onClick={connectPrinter}
+                  disabled={printerDevice.status === 'connected'}
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded border transition-colors ${
+                    printerDevice.status === 'connected'
+                      ? 'border-emerald-500/30 text-emerald-400 cursor-default'
+                      : 'border-slate-600 text-slate-400 hover:bg-slate-700 hover:text-white'
+                  }`}
+                 >
+                   {printerDevice.status === 'connected' ? 'READY' : 'CONN'}
+                 </button>
              )}
            </div>
         </div>
+
+        {/* Right: Spacer for balance */}
+        <div className="w-1/4"></div>
       </header>
 
       {/* Main Content Grid */}
-      <main className="flex-1 grid grid-cols-12 gap-0 overflow-hidden">
+      <main className="flex-1 grid grid-cols-12 gap-0 overflow-hidden relative">
         
-        {/* Left Side: Preview (55%) approx - col-span-7 */}
-        <section className="col-span-12 md:col-span-7 bg-slate-900 p-6 flex flex-col gap-4 border-r border-slate-800 overflow-y-auto">
-          <div className="flex-1 min-h-[500px] flex items-center justify-center bg-slate-800/50 rounded-lg">
-             <LabelPreview data={labelData} size={labelSize} />
+        {/* Left Side: Preview (55%) */}
+        <section className="col-span-12 md:col-span-7 bg-slate-950 relative flex flex-col border-r border-slate-800/50">
+          
+          {/* Background Grid Pattern */}
+          <div className="absolute inset-0 opacity-5 pointer-events-none" 
+               style={{ backgroundImage: 'radial-gradient(#64748b 1px, transparent 1px)', backgroundSize: '20px 20px' }}>
+          </div>
+
+          <div className="flex-1 flex flex-col items-center justify-center p-8 overflow-auto z-0">
+             <div className="bg-white p-4 shadow-2xl shadow-black/50 rounded-sm">
+                <LabelPreview data={labelData} size={labelSize} />
+             </div>
           </div>
           
           {/* Action Bar */}
-          <div className="flex gap-4 justify-center bg-slate-800 p-4 rounded-lg border border-slate-700">
+          <div className="p-6 flex justify-center gap-4 bg-slate-900/80 backdrop-blur border-t border-slate-800 z-10">
              <button 
                onClick={printLabel}
-               className="bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 px-8 rounded shadow-lg flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                disabled={!labelData.trackingNumber}
+               className="group relative bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 pl-6 pr-8 rounded-lg shadow-lg flex items-center gap-3 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 overflow-hidden"
              >
+               <div className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                </svg>
-               PRINT LABEL
+               <span className="tracking-wide">PRINT LABEL</span>
              </button>
 
              <button 
                onClick={exportAsImage}
-               className="bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold py-3 px-6 rounded shadow flex items-center gap-2 transition-all"
+               className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 px-6 rounded-lg border border-slate-700 shadow flex items-center gap-2 transition-all"
              >
                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                </svg>
-               EXPORT PNG
+               SAVE IMAGE
              </button>
           </div>
         </section>
 
-        {/* Right Side: Form & Logs (45%) - col-span-5 */}
-        <section className="col-span-12 md:col-span-5 bg-slate-900 flex flex-col h-full overflow-hidden border-l border-slate-800">
-          <div className="flex-1 p-4 overflow-hidden">
+        {/* Right Side: Form & Logs (45%) */}
+        <section className="col-span-12 md:col-span-5 bg-slate-900 flex flex-col h-full overflow-hidden border-l border-slate-800 shadow-2xl z-10">
+          <div className="flex-1 overflow-hidden relative">
              <LabelForm 
                data={labelData} 
                onChange={setLabelData} 
@@ -335,14 +425,14 @@ function App() {
                onLog={addLog}
              />
           </div>
-          <div className="h-48 p-4 pt-0 shrink-0">
+          <div className="h-40 shrink-0 border-t border-slate-800">
              <LogPanel logs={logs} onClear={() => setLogs([])} />
           </div>
         </section>
 
       </main>
       
-      {/* Invisible Printable Area for System Print */}
+      {/* Invisible Printable Area */}
       <div id="printable-area" className="hidden print:flex">
          <LabelPreview data={labelData} size={labelSize} />
       </div>
